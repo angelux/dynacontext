@@ -1,25 +1,30 @@
-import a from "fs";
-import { spawn as M } from "child_process";
-import { captureTool as w, AgentSession as O } from "../services/agent.js";
-import { callLLM as _ } from "../services/llm.js";
-import { composeRetrievalStepPrompts as I, loadPrompt as R, loadStepHeader as F } from "../services/prompts.js";
+import l from "fs";
+import { spawn as O } from "child_process";
+import { captureTool as w, AgentSession as M } from "../services/agent.js";
+import { callLLM as R } from "../services/llm.js";
+import { composeRetrievalStepPrompts as I, loadPrompt as _, loadStepHeader as F } from "../services/prompts.js";
 import { resolveProvider as P } from "../services/provider.js";
 function A(e, { cwd: t = process.cwd(), timeout: o = 3e4 } = {}) {
   return new Promise((n) => {
-    const p = M(e, { shell: !0, cwd: t });
-    let r = "", s = "";
-    const f = setTimeout(() => {
-      p.kill(), n(`[TIMEOUT after ${o}ms]`);
+    let a = !1;
+    const r = O(e, { shell: !0, cwd: t, stdio: ["ignore", "pipe", "pipe"] });
+    let c = "", u = "";
+    const d = setTimeout(() => {
+      a || (a = !0, r.kill(), n(`[TIMEOUT after ${o}ms]`));
     }, o);
-    p.stdout.on("data", (l) => {
-      r += l;
-    }), p.stderr.on("data", (l) => {
-      s += l;
-    }), p.on("close", (l) => {
-      clearTimeout(f);
-      let d = (r + s).replace(/[^\x20-\x7E\x09\x0A\x0D]/g, "").trim();
-      n(l !== 0 ? `[ERROR - Exit Code ${l}]
-${d}` : d || "[Success - No Output]");
+    r.stdout.on("data", (p) => {
+      c += p;
+    }), r.stderr.on("data", (p) => {
+      u += p;
+    }), r.on("error", (p) => {
+      a || (a = !0, clearTimeout(d), n(`[ERROR - Spawn Failed]
+${p.message}`));
+    }), r.on("close", (p) => {
+      if (a) return;
+      a = !0, clearTimeout(d);
+      let i = (c + u).replace(/[^\x20-\x7E\x09\x0A\x0D]/g, "").trim();
+      n(p !== 0 ? `[ERROR - Exit Code ${p}]
+${i}` : i || "[Success - No Output]");
     });
   });
 }
@@ -27,22 +32,22 @@ async function x(e, { defaultFile: t, onCommand: o } = {}) {
   for (const n of e) {
     if (!n || !n.command) continue;
     o && o(n.command, "running");
-    const p = await A(n.command), r = n.file || t;
+    const a = await A(n.command), r = n.file || t;
     if (r) {
-      const s = [
+      const c = [
         ":::command+note",
         `source: ${n.command}`,
         "---",
-        p,
+        a,
         "---",
         n.notes || "No justification provided.",
         ":::",
         ""
       ].join(`
 `);
-      a.appendFileSync(r, s);
+      l.appendFileSync(r, c);
     }
-    o && (p.includes("[ERROR") || p.includes("[TIMEOUT") ? o(n.command, "error") : o(n.command, "done"));
+    o && (a.includes("[ERROR") || a.includes("[TIMEOUT") ? o(n.command, "error") : o(n.command, "done"));
   }
 }
 function L(e) {
@@ -50,10 +55,10 @@ function L(e) {
   try {
     return JSON.parse(o);
   } catch (n) {
-    const p = N(o);
-    if (p !== o)
+    const a = N(o);
+    if (a !== o)
       try {
-        return JSON.parse(p);
+        return JSON.parse(a);
       } catch {
       }
     throw new Error(`Failed to parse LLM JSON output: ${n.message}
@@ -62,8 +67,8 @@ Content preview: ${o.substring(0, 200)}`);
 }
 function N(e) {
   let t = "", o = !1, n = !1;
-  for (let p = 0; p < e.length; p++) {
-    const r = e[p];
+  for (let a = 0; a < e.length; a++) {
+    const r = e[a];
     if (!o) {
       t += r, r === '"' && (o = !0);
       continue;
@@ -85,20 +90,20 @@ async function E({
   stepIndex: t,
   stepLabel: o,
   stepTitle: n,
-  stepPrompt: p,
+  stepPrompt: a,
   priorStepIndices: r,
-  tools: s,
-  stepFile: f,
-  skipFileInit: l = !1,
-  priorContext: d,
+  tools: c,
+  stepFile: u,
+  skipFileInit: d = !1,
+  priorContext: p,
   callbacks: i = {}
 }) {
   i.onStepStart && i.onStepStart(o, n), e.retrieval._cmdCount = 0;
-  let v = !1, u = 0;
-  for (; !v && u < 2; ) {
-    if (!l) {
+  let v = !1, f = 0;
+  for (; !v && f < 2; ) {
+    if (!d) {
       const m = F(t + 1);
-      a.writeFileSync(f, m);
+      l.writeFileSync(u, m);
     }
     let S = "";
     if (r.length > 0) {
@@ -108,15 +113,15 @@ async function E({
       S = m.join(`
 `);
     }
-    const T = d ? d() : "";
+    const T = p ? p() : "";
     let C = "";
-    if (!l) {
-      const m = a.existsSync(f) ? a.readFileSync(f, "utf8") : "";
+    if (!d) {
+      const m = l.existsSync(u) ? l.readFileSync(u, "utf8") : "";
       C = [
         "---",
         "## Current Step File State",
         "",
-        `Your step file (${f}) has been initialized. Its current contents:`,
+        `Your step file (${u}) has been initialized. Its current contents:`,
         "",
         m,
         "",
@@ -127,17 +132,17 @@ async function E({
 `);
     }
     const h = [
-      p,
+      a,
       S,
       T || C
     ].filter(Boolean).join(`
-`), g = P(e.config.agent), c = new O({
+`), g = P(e.config.agent), s = new M({
       endpoint: g.endpoint,
       model: g.model,
       apiKey: g.apiKey,
       format: g.format,
-      stepFile: f,
-      tools: s,
+      stepFile: u,
+      tools: c,
       warningThreshold: e.config.agent.warningThreshold,
       commandTimeout: e.config.agent.commandTimeout,
       onTurnWarning: (m) => {
@@ -148,12 +153,12 @@ async function E({
       }
     });
     try {
-      await c.chat(h), c.usageLog && c.usageLog.length > 0 && e.stats.retrieval.push(...c.usageLog), a.existsSync(f) ? e.retrieval.steps[t] = a.readFileSync(f, "utf8") : e.retrieval.steps[t] = "", i.onStepComplete && i.onStepComplete(o, e.retrieval._cmdCount), v = !0;
+      await s.chat(h), s.usageLog && s.usageLog.length > 0 && e.stats.retrieval.push(...s.usageLog), l.existsSync(u) ? e.retrieval.steps[t] = l.readFileSync(u, "utf8") : e.retrieval.steps[t] = "", i.onStepComplete && i.onStepComplete(o, e.retrieval._cmdCount), v = !0;
     } catch (m) {
-      if (u++, u >= 2)
+      if (f++, f >= 2)
         throw m;
     } finally {
-      await c.end();
+      await s.end();
     }
   }
 }
@@ -163,26 +168,26 @@ async function H(e, t = {}) {
     taskSummary: e.intake.summary,
     taskType: e.intake.taskType,
     config: e.config
-  }), n = e.config.retrieval.refinement || {}, r = n.endpoint && n.apiKey ? P(n) : P(e.config.agent), s = n.step1b?.model || r.model, f = n.step2?.model || r.model, l = e.retrieval.failedStep ?? 0;
-  let d = null;
+  }), n = e.config.retrieval.refinement || {}, r = n.endpoint && n.apiKey ? P(n) : P(e.config.agent), c = n.step1b?.model || r.model, u = n.step2?.model || r.model, d = e.retrieval.failedStep ?? 0;
+  let p = null;
   try {
-    if (l <= 0) {
-      d = 0, t.onStepStart && t.onStepStart("0", "Pattern Execution"), e.retrieval._cmdCount = 0, a.writeFileSync("retrieval-patterns.md", `# Retrieval Patterns - Exploration Log
+    if (d <= 0) {
+      p = 0, t.onStepStart && t.onStepStart("0", "Pattern Execution"), e.retrieval._cmdCount = 0, l.writeFileSync("retrieval-patterns.md", `# Retrieval Patterns - Exploration Log
 
 `);
       const i = e.intake.searchPatterns || [];
       if (i.length === 0 && e.intake.assessment === "READY" && console.warn("[retrieval] Warning: READY assessment but no search patterns found"), i.length > 0) {
-        const v = i.map((u) => ({ command: u.command, notes: u.notes }));
+        const v = i.map((f) => ({ command: f.command, notes: f.notes }));
         await x(v, {
           defaultFile: "retrieval-patterns.md",
-          onCommand: (u, S) => {
-            S === "running" && (e.retrieval._cmdCount = (e.retrieval._cmdCount || 0) + 1), t.onToolCall && t.onToolCall(u, S);
+          onCommand: (f, S) => {
+            S === "running" && (e.retrieval._cmdCount = (e.retrieval._cmdCount || 0) + 1), t.onToolCall && t.onToolCall(f, S);
           }
         });
       }
       t.onStepComplete && t.onStepComplete("0", e.retrieval._cmdCount || 0);
     }
-    if (l <= 1 && (d = 1, await E({
+    if (d <= 1 && (p = 1, await E({
       session: e,
       stepIndex: 0,
       stepLabel: "1a",
@@ -198,7 +203,7 @@ async function H(e, t = {}) {
         "",
         "Your exploration file (retrieval-patterns.md) has been seeded with initial pattern results. Its current contents:",
         "",
-        a.existsSync("retrieval-patterns.md") ? a.readFileSync("retrieval-patterns.md", "utf8") : "",
+        l.existsSync("retrieval-patterns.md") ? l.readFileSync("retrieval-patterns.md", "utf8") : "",
         "",
         "---",
         "",
@@ -206,47 +211,47 @@ async function H(e, t = {}) {
       ].join(`
 `),
       callbacks: t
-    }), e.retrieval.patterns = a.existsSync("retrieval-patterns.md") ? a.readFileSync("retrieval-patterns.md", "utf8") : ""), l <= 2) {
-      d = 2, t.onStepStart && t.onStepStart("1b", "Pattern Refinement"), e.retrieval._cmdCount = 0;
-      const i = e.retrieval.patterns || (a.existsSync("retrieval-patterns.md") ? a.readFileSync("retrieval-patterns.md", "utf8") : ""), v = R("retrieval-refinement-1b.md").replace(/{{TASK_SUMMARY}}/g, e.intake.summary).replace(/{{EXPLORATION_CONTENT}}/g, i), { content: u, usage: S } = await _({
+    }), e.retrieval.patterns = l.existsSync("retrieval-patterns.md") ? l.readFileSync("retrieval-patterns.md", "utf8") : ""), d <= 2) {
+      p = 2, t.onStepStart && t.onStepStart("1b", "Pattern Refinement"), e.retrieval._cmdCount = 0;
+      const i = e.retrieval.patterns || (l.existsSync("retrieval-patterns.md") ? l.readFileSync("retrieval-patterns.md", "utf8") : ""), v = _("retrieval-refinement-1b.md").replace(/{{TASK_SUMMARY}}/g, e.intake.summary).replace(/{{EXPLORATION_CONTENT}}/g, i), { content: f, usage: S } = await R({
         messages: [{ role: "user", content: "Analyze the exploration results and produce refined search commands." }],
         systemPrompt: v,
         endpoint: r.endpoint,
-        model: s,
+        model: c,
         apiKey: r.apiKey,
         format: r.format,
         cache: !1
       });
       e.stats.retrieval.push(S);
-      const C = L(u).captures || [], h = F(1);
-      a.writeFileSync("retrieval-step1.md", h), await x(C, {
+      const C = L(f).captures || [], h = F(1);
+      l.writeFileSync("retrieval-step1.md", h), await x(C, {
         defaultFile: "retrieval-step1.md",
-        onCommand: (g, c) => {
-          c === "running" && (e.retrieval._cmdCount = (e.retrieval._cmdCount || 0) + 1), t.onToolCall && t.onToolCall(g, c);
+        onCommand: (g, s) => {
+          s === "running" && (e.retrieval._cmdCount = (e.retrieval._cmdCount || 0) + 1), t.onToolCall && t.onToolCall(g, s);
         }
-      }), e.retrieval.steps[0] = a.readFileSync("retrieval-step1.md", "utf8"), t.onStepComplete && t.onStepComplete("1b", e.retrieval._cmdCount || 0);
+      }), e.retrieval.steps[0] = l.readFileSync("retrieval-step1.md", "utf8"), t.onStepComplete && t.onStepComplete("1b", e.retrieval._cmdCount || 0);
     }
-    if (l <= 3) {
-      d = 3, t.onStepStart && t.onStepStart("2", "Structural Selection"), e.retrieval._cmdCount = 0;
-      const i = await A("rg --files | sort"), v = e.retrieval.steps[0] || (a.existsSync("retrieval-step1.md") ? a.readFileSync("retrieval-step1.md", "utf8") : ""), u = R("retrieval-refinement-2.md").replace(/{{TASK_SUMMARY}}/g, e.intake.summary).replace(/{{FILE_LISTING}}/g, i).replace(/{{STEP1_CONTENT}}/g, v), { content: S, usage: T } = await _({
+    if (d <= 3) {
+      p = 3, t.onStepStart && t.onStepStart("2", "Structural Selection"), e.retrieval._cmdCount = 0;
+      const i = await A("rg --files | sort"), v = e.retrieval.steps[0] || (l.existsSync("retrieval-step1.md") ? l.readFileSync("retrieval-step1.md", "utf8") : ""), f = _("retrieval-refinement-2.md").replace(/{{TASK_SUMMARY}}/g, e.intake.summary).replace(/{{FILE_LISTING}}/g, i).replace(/{{STEP1_CONTENT}}/g, v), { content: S, usage: T } = await R({
         messages: [{ role: "user", content: "Analyze the file landscape and search results, then produce structural commands." }],
-        systemPrompt: u,
+        systemPrompt: f,
         endpoint: r.endpoint,
-        model: f,
+        model: u,
         apiKey: r.apiKey,
         format: r.format,
         cache: !1
       });
       e.stats.retrieval.push(T);
       const h = L(S).captures || [], g = F(2);
-      a.writeFileSync("retrieval-step2.md", g), await x(h, {
+      l.writeFileSync("retrieval-step2.md", g), await x(h, {
         defaultFile: "retrieval-step2.md",
-        onCommand: (c, m) => {
-          m === "running" && (e.retrieval._cmdCount = (e.retrieval._cmdCount || 0) + 1), t.onToolCall && t.onToolCall(c, m);
+        onCommand: (s, m) => {
+          m === "running" && (e.retrieval._cmdCount = (e.retrieval._cmdCount || 0) + 1), t.onToolCall && t.onToolCall(s, m);
         }
-      }), e.retrieval.steps[1] = a.readFileSync("retrieval-step2.md", "utf8"), t.onStepComplete && t.onStepComplete("2", e.retrieval._cmdCount || 0);
+      }), e.retrieval.steps[1] = l.readFileSync("retrieval-step2.md", "utf8"), t.onStepComplete && t.onStepComplete("2", e.retrieval._cmdCount || 0);
     }
-    l <= 4 && (d = 4, await E({
+    d <= 4 && (p = 4, await E({
       session: e,
       stepIndex: 2,
       stepLabel: "3",
@@ -256,7 +261,7 @@ async function H(e, t = {}) {
       tools: [w],
       stepFile: "retrieval-step3.md",
       callbacks: t
-    })), l <= 5 && (d = 5, await E({
+    })), d <= 5 && (p = 5, await E({
       session: e,
       stepIndex: 3,
       stepLabel: "4",
@@ -268,7 +273,7 @@ async function H(e, t = {}) {
       callbacks: t
     }));
   } catch (i) {
-    throw d !== null && (e.retrieval.failedStep = d), i;
+    throw p !== null && (e.retrieval.failedStep = p), i;
   }
   return e.retrieval.failedStep = null, t.onFooter && t.onFooter(), "ASSEMBLY";
 }
