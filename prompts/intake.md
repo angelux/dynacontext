@@ -107,16 +107,19 @@ These are the seed commands that initiate retrieval. They run against the codeba
 
 **Pattern design:**
 
+The retrieval agent explores independently after seeds run. Seeds are starting points, not comprehensive searches. A seed that returns nothing is free — the agent finds its own way. A seed that matches thousands of files dumps megabytes of noise into the pipeline before the agent even begins. The risk is asymmetric: **err toward too specific, never toward too broad.**
+
 | Principle | What It Means |
 |-----------|--------------|
-| Cast a useful net | Wide enough to find relevant code, narrow enough to avoid noise. If the developer mentions `$is-amp`, also generate patterns for `amp-`, `-amp`, `$amp`, `is-amp`, `<amp-` |
-| Use ripgrep syntax | `rg` commands. `-l` (list files) for broad searches, `-n` (line numbers) for targeted ones |
-| Scope by file type when clear | `--type js`, `--type css`, `-g '*.vue'` |
-| Exclude noise directories | Always append: `--glob '!dist/' --glob '!legacy/' --glob '!node_modules/' --glob '!.dynacontext/' --glob '!build/'`. Ripgrep respects .gitignore, but these directories may not be gitignored in every project. Explicit exclusion is cheap insurance. Extend the list if the developer mentions other output or vendor directories. |
-| Search and locate only | Seed commands find WHERE code lives — they do not read it. Use `rg -l` (list matching files) and `rg -n` (show matching lines). Do not use `cat`, `head`, `tail`, `sed`, or any command that reads entire files. Content capture is retrieval's job. |
-| Use case-insensitive when appropriate | `-i` when the pattern could appear in different cases |
-| Target 3–8 commands | Fewer for focused tasks, more for broad ones |
-| Produce an empty array when you cannot determine meaningful patterns | `{ "captures": [] }` |
+| Specificity is the primary control | Use identifiers unique to the task: component names, function names, variable names, class names, route paths. `rg -l 'CheckoutPaymentForm'` is a good seed. `rg -l 'checkout'` is risky. `rg -l 'handler'` is almost certainly too broad. The more generic the term, the more likely it matches across the entire repo. When the developer gives you specific names, use them. When they don't, that's a signal to ask — or to produce fewer seeds, not broader ones. |
+| Generate variants of specific terms, not broad synonyms | If the developer mentions `CheckoutPaymentForm`, generate variants: `CheckoutPayment`, `checkout-payment`, `checkout_payment`. Do NOT broaden to generic related terms like `payment`, `cart`, `order`. Variants explore naming conventions. Synonyms explore the entire domain. |
+| Scope by file type when clear | `--type js`, `--type css`, `-g '*.vue'`. This is your most reliable narrowing tool after pattern specificity, because it doesn't depend on knowing directory structure. |
+| Path scoping is an educated guess | If the developer names a directory or area, you can scope to a plausible path: `rg -l 'pattern' src/components/`. But you have no filesystem access — the path may not exist. A wrong path simply returns nothing (low cost). Combine path scoping with specific patterns when you have both; never rely on path scoping alone to control breadth. |
+| Exclude noise directories | Always append: `--glob '!dist/' --glob '!legacy/' --glob '!node_modules/' --glob '!.dynacontext/' --glob '!build/'`. Extend the list if the developer mentions other output or vendor directories. |
+| Search and locate only | Seed commands find WHERE code lives — they do not read it. Use `rg -l` (list matching files) and `rg -n` (show matching lines). Do not use `cat`, `head`, `tail`, `sed`, or any command that reads entire files. Prefer `rg -l` for seeds — it produces a file list. Reserve `rg -n` for when you have a specific term AND can scope to a plausible directory or file type. |
+| Produce an empty array when seeds would be guesswork | If the developer's description doesn't give you specific terms, component names, or identifiers to search for, produce `{ "captures": [] }`. The retrieval agent is designed to explore from the task summary alone. Broad, unscoped seeds actively harm the pipeline — they are worse than no seeds. An empty array is a legitimate, responsible output. |
+| Use case-insensitive when appropriate | `-i` when the pattern could appear in different cases. |
+| Target 3–8 commands | Fewer for focused tasks, more for broad ones. If you find yourself generating more than 5 commands, check whether you're compensating for vagueness with volume. That's a sign to produce fewer, more specific seeds — or none. |
 
 Ripgrep syntax note: when using multiple patterns, use `-e` flags or unescaped `|` inside single quotes. Do NOT use `\|` — that is grep syntax and searches for a literal pipe character in ripgrep.
 
