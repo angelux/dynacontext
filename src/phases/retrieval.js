@@ -11,12 +11,15 @@ import { resolveProvider } from '../services/provider.js';
  */
 function executeCommandAsync(command, { cwd = process.cwd(), timeout = 30000 } = {}) {
   return new Promise((resolve) => {
-    const child = spawn(command, { shell: true, cwd });
+    let resolved = false;
+    const child = spawn(command, { shell: true, cwd, stdio: ['ignore', 'pipe', 'pipe'] });
 
     let stdout = '';
     let stderr = '';
 
     const timer = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
       child.kill();
       resolve(`[TIMEOUT after ${timeout}ms]`);
     }, timeout);
@@ -28,7 +31,16 @@ function executeCommandAsync(command, { cwd = process.cwd(), timeout = 30000 } =
       stderr += data;
     });
 
+    child.on('error', (err) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timer);
+      resolve(`[ERROR - Spawn Failed]\n${err.message}`);
+    });
+
     child.on('close', (code) => {
+      if (resolved) return;
+      resolved = true;
       clearTimeout(timer);
 
       let output = (stdout + stderr).replace(/[^\x20-\x7E\x09\x0A\x0D]/g, '').trim();
